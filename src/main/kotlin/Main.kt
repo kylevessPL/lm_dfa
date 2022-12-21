@@ -4,8 +4,14 @@
  * difficulty level: 3
  */
 
+import TransitionTablePrinter.print
 import java.time.Instant
 import java.util.Scanner
+
+/**
+ * Type alias for transition table row
+ */
+typealias Row = Map.Entry<Pair<Int, Int>, Int>
 
 /**
  * Exception thrown if inserted coin face value is not accepted by the automaton
@@ -61,6 +67,16 @@ class CarWashAutomaton {
      */
     private companion object {
         /**
+         * Delta character of transition function
+         */
+        const val DELTA_CHARACTER = "δ"
+
+        /**
+         *  Accepted state a.k.a. standard wash price
+         */
+        const val acceptingState = 20
+
+        /**
          * Transition table representation as a key-value map
          *
          * Key – pair of unique states with corresponding transition values
@@ -89,15 +105,37 @@ class CarWashAutomaton {
             Pair(17, 1) to 18, Pair(17, 2) to 19, Pair(17, 5) to 21, // q17
             Pair(18, 1) to 19, Pair(18, 2) to 20, Pair(18, 5) to 21, // q18
             Pair(19, 1) to 20, Pair(19, 2) to 21, Pair(19, 5) to 21, // q19
-            Pair(20, 1) to 21, Pair(20, 2) to 21, Pair(20, 5) to 21, // q20 - accepting state
+            Pair(20, 1) to 20, Pair(20, 2) to 20, Pair(20, 5) to 20, // q20 - accepting state
             Pair(21, 1) to 21, Pair(21, 2) to 21, Pair(21, 5) to 21, // q21 - rejecting state
         )
 
         /**
-         *  Accepted state a.k.a. standard wash price
+         * Converts transition table to 2D array
          */
-        const val acceptingState = 20
+        @JvmStatic
+        fun transitionTableAsMatrix(): Array<Array<String>> {
+            fun List<Row>.mapRows() = (listOf(first().key.first) + map(Row::value))
+                .map(Int::toString)
+                .map { "q$it" }
+                .toTypedArray()
+
+            val header = (listOf(DELTA_CHARACTER) + transitionTable.keys
+                .map(Pair<Int, Int>::second)
+                .map(Int::toString)
+                .distinct())
+                .toTypedArray()
+            val rows = transitionTable.entries
+                .chunked(3)
+                .map(List<Row>::mapRows)
+                .toTypedArray()
+            return arrayOf(header).plus(rows)
+        }
     }
+
+    /**
+     * Representation of transition table as 2D array
+     */
+    val transitionTableMatrix = transitionTableAsMatrix()
 
     /**
      * Representation of current state a.k.a. current total value
@@ -118,7 +156,7 @@ class CarWashAutomaton {
         printCurrentState()
         return _states.last().let { state ->
             /** reset automaton state if finished **/
-            takeIf { state >= acceptingState }?.also { resetState() }
+            takeIf { state >= acceptingState }?.also { finalize() }
             when {
                 /** generate ticket if state meets accepted criteria **/
                 state == acceptingState -> AutomatonResult.Ticket()
@@ -133,20 +171,17 @@ class CarWashAutomaton {
     /**
      * Prints current automaton state a.k.a. current total value
      */
-    private fun printCurrentState() = _states.last().let { value ->
-        println("Current automaton state: q$value, current total value: $value")
+    private fun printCurrentState() = _states.last().let {
+        println("Current automaton state: q$it, current total value: $it")
     }
 
     /**
      * Prints final automaton results & resets its state
      */
-    private fun resetState() = with(_states) {
+    private fun finalize() = with(_states) {
         println("Final automaton state: q${last()}")
         println("Total value inserted: ${last()}")
         println("State change path: ${statesToString()}")
-        /** clear all state list elements except q0 */
-        subList(1, size).clear()
-        println("Automaton reset done")
     }
 
     /**
@@ -155,8 +190,9 @@ class CarWashAutomaton {
     private fun statesToString() = _states.joinToString(separator = "→", transform = { "q$it" })
 }
 
-fun main() {
-    val automaton = CarWashAutomaton()
+fun main() = with(CarWashAutomaton()) {
+    println("Transition table:")
+    transitionTableMatrix.print()
     Scanner(System.`in`).use { scanner ->
         /** infinite loop **/
         run loop@{
@@ -167,7 +203,7 @@ fun main() {
                     if (scanner.hasNextInt()) {
                         val value = scanner.nextInt()
                         /** insert coin **/
-                        automaton.insert(Coin.of(value))?.also { result ->
+                        insert(Coin.of(value))?.also { result ->
                             println(result.message)
                             return@loop
                         }
